@@ -1,0 +1,17 @@
+model_cfg: 
+  arch : ae
+  encoder :
+      arch : fc_vec
+      linear_layer_type: hyperbolic
+      l_hidden: []
+      activation : []
+      out_activation: relu
+  decoder : 
+      arch : fc_vec
+      linear_layer_type: hyperbolic
+      l_hidden: []
+      activation : []
+      out_activation : relu
+  
+  x_dim: 512
+  z_dim: 64

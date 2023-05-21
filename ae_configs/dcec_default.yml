@@ -1,0 +1,22 @@
+model_cfg: 
+  arch : dcec
+  encoder :
+      arch : fc_vec
+      linear_layer_type: euclidian
+      l_hidden: 
+      - 80
+      activation : 
+      - relu
+      out_activation: linear
+  decoder : 
+      arch : fc_vec
+      linear_layer_type: euclidian
+      l_hidden: 
+      - 80
+      activation : 
+      - relu
+      out_activation : relu
+  
+  x_dim: 512
+  z_dim: 64
+  n_clusters: 10

@@ -1,0 +1,31 @@
+graph_config:
+  use_graph : True
+  include_center : True
+  replace: False
+  num_nn: 3
+  bs_nn: 2
+
+model_cfg: 
+  arch : nrael
+  encoder :
+      arch : fc_vec
+      linear_layer_type: euclidian
+      l_hidden: 
+      - 64
+      activation : 
+      - relu
+      out_activation: linear
+  decoder : 
+      arch : fc_vec
+      linear_layer_type: euclidian
+      l_hidden: 
+      - 64
+      activation : 
+      - relu
+      out_activation : relu
+  
+  x_dim: 512
+  z_dim: 10
+  kernel:  
+    type: binary
+    lambda: 0.5
