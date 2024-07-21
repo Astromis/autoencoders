@@ -18,12 +18,14 @@ setup(
     licence='MIT',
     packages=find_packages(),
     install_requires=[
-        'torch',
-        'scikit-learn',
-        'numpy',
-        'tqdm',
-        'faiss-cpu',
-        'pyyaml',
+        "torch>=1.13.1",
+        "scikit-learn>=1.2.0",
+        "numpy>=1.20.0",
+        "faiss-cpu==1.7.4",
+        "tqdm",
+        "pyyaml",
+        "hyptorch @ git+https://github.com/leymir/hyperbolic-image-embeddings.git"
+
     ],
     include_package_data = True,
     package_data={'autoencoders': ['ae_configs/*.yml']}
