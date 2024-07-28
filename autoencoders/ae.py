@@ -5,6 +5,10 @@ import torch.nn as nn
 from .layers import ClusteringLayer
 from sklearn.cluster import KMeans
 from tqdm.auto import tqdm
+from warnings import warn
+from pathlib import Path
+import yaml
+
 
 def get_kernel_function(kernel):
     if kernel['type'] == 'binary':
@@ -25,11 +29,12 @@ def get_kernel_function(kernel):
     return kernel_func
     
 class AE(nn.Module):
-    def __init__(self, encoder, decoder):
+    def __init__(self, encoder, decoder, config=None):
         super(AE, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.loss = torch.nn.MSELoss()
+        self.config = config
 
     def forward(self, x):
         z = self.encoder(x)
@@ -76,10 +81,33 @@ class AE(nn.Module):
                     metrics = self.train_step(batch, optim)
                     tepoch.set_postfix(loss=metrics["loss"])
 
+    def save_model(self, save_path, rewrite=True):
+        if isinstance(save_path, str):
+            save_path = Path(save_path)
+        save_path.mkdir(exist_ok=rewrite, parents=True)
+        torch.save(self.state_dict(), save_path/'model_weights.bin')
+        if self.config is not None:
+            with open(save_path/"config.yml", 'w') as f:
+                yaml.safe_dump(self.config, f)
+        else:
+            warn("Your model doesn't have a config.")
+
+    @classmethod
+    def load_model(cls, load_path):
+        from . import get_ae
+        if isinstance(load_path, str):
+            load_path = Path(load_path)
+        with open(load_path/"config.yml") as f:
+            model_config = yaml.safe_load(f)
+        model = get_ae(**model_config)
+        model.load_state_dict(torch.load(load_path/"model_weights.bin"))
+        return model
+
+
 
 class NRAE(AE):
-    def __init__(self, encoder, decoder, approx_order=1, kernel=None):
-        super().__init__(encoder, decoder)
+    def __init__(self, encoder, decoder, approx_order=1, kernel=None, **kwargs):
+        super().__init__(encoder, decoder, **kwargs)
         self.encoder = encoder
         self.decoder = decoder
         self.approx_order = approx_order
@@ -145,8 +173,8 @@ class NRAE(AE):
         
 
 class DCEC(AE):
-    def __init__(self, encoder, decoder, z_dim, n_clusters, update_interval = 4, tol=1e-3):
-        super().__init__(encoder, decoder)
+    def __init__(self, encoder, decoder, z_dim, n_clusters, update_interval = 4, tol=1e-3,  **kwargs):
+        super().__init__(encoder, decoder,  **kwargs)
         self.encoder = encoder
         self.decoder = decoder
         self.update_interval = update_interval
