@@ -1,33 +1,17 @@
-import os
 import numpy as np
 import torch
 import torch.nn as nn
-from .layers import ClusteringLayer
 from sklearn.cluster import KMeans
+from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 from warnings import warn
 from pathlib import Path
 import yaml
 
-
-def get_kernel_function(kernel):
-    if kernel['type'] == 'binary':
-        def kernel_func(x_c, x_nn):
-            '''
-            x_c.size() = (bs, dim), 
-            x_nn.size() = (bs, num_nn, dim)
-            '''
-            bs = x_nn.size(0)
-            num_nn = x_nn.size(1)
-            x_c = x_c.view(bs, -1)
-            x_nn = x_nn.view(bs, num_nn, -1)
-            eps = 1.0e-12
-            index = torch.norm(x_c.unsqueeze(1)-x_nn, dim=2) > eps
-            output = torch.ones(bs, num_nn).to(x_c)
-            output[~index] = kernel['lambda']
-            return output # (bs, num_nn)
-    return kernel_func
-    
+from .layers import ClusteringLayer
+from .dataset import EmbeddingDataset
+from .dataset import EmbeddingDatasetWithGraph
+from .utils import get_kernel_function
 class AE(nn.Module):
     def __init__(self, encoder, decoder, config=None):
         super(AE, self).__init__()
@@ -55,7 +39,8 @@ class AE(nn.Module):
         optimizer.step()
         return {"loss": loss.item()}
 
-    def apply_encoder(self, data):
+    def apply_encoder(self, data, batch_size=1000):
+        data = self.prepare_dataloader(data, batch_size)
         vectors = []
         self.encoder = self.encoder.eval()
         with torch.no_grad():
@@ -67,8 +52,14 @@ class AE(nn.Module):
         self.encoder = self.encoder.train()
         return np.vstack(vectors)
 
-    
-    def train(self, data, epoch, lr=1e-3):
+    def prepare_dataloader(self, data, batch_size):
+        if not isinstance(data, EmbeddingDataset):
+            data = EmbeddingDataset(data)
+        data = DataLoader(data, batch_size=batch_size)
+        return data
+
+    def train(self, data, epoch, batch_size=100, lr=1e-3):
+        data = self.prepare_dataloader(data, batch_size)
         params_to_optimize = [
             {'params': self.encoder.parameters()},
             {'params': self.decoder.parameters()}
@@ -106,12 +97,13 @@ class AE(nn.Module):
 
 
 class NRAE(AE):
-    def __init__(self, encoder, decoder, approx_order=1, kernel=None, **kwargs):
+    def __init__(self, encoder, decoder, config, approx_order=1, **kwargs):
         super().__init__(encoder, decoder, **kwargs)
         self.encoder = encoder
         self.decoder = decoder
+        self.config = config
         self.approx_order = approx_order
-        self.kernel_func = get_kernel_function(kernel)
+        self.kernel_func = get_kernel_function(self.config["kernel"])
     
     def jacobian(self, z, dz, create_graph=True):
         batch_size = dz.size(0)
@@ -121,7 +113,13 @@ class NRAE(AE):
         v = dz.view(-1, z_dim)  # (bs * num_nn , z_dim)
         inputs = (z.unsqueeze(1).repeat(1, num_nn, 1).view(-1, z_dim))  # (bs * num_nn , z_dim)
         jac = torch.autograd.functional.jvp(self.decoder, inputs, v=v, create_graph=create_graph)[1].view(batch_size, num_nn, -1)
-        return jac        
+        return jac
+
+    def prepare_dataloader(self, data, batch_size):
+        if not isinstance(data, EmbeddingDataset):
+            data = EmbeddingDatasetWithGraph(data, )
+        data = DataLoader(data, batch_size=batch_size)
+        return data
 
     def jacobian_and_hessian(self, z, dz, create_graph=True):
         batch_size = dz.size(0)
@@ -220,9 +218,8 @@ class DCEC(AE):
         optimizer.step()
         return {"loss": loss.item()}
 
-    def train(self, data, epoch, lr=0.001):
-        # super().train(data, epoch, lr=lr)
-        
+    def train(self, data, epoch, batch_size, lr=0.001):
+        data = self.prepare_dataloader(data, batch_size)
         y_pred_last = self.init_clustering_layer(data)
         params_to_optimize = [
             {'params': self.encoder.parameters()},
