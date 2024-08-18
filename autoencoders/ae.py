@@ -12,6 +12,8 @@ from .layers import ClusteringLayer
 from .dataset import EmbeddingDataset
 from .dataset import EmbeddingDatasetWithGraph
 from .utils import get_kernel_function
+
+
 class AE(nn.Module):
     def __init__(self, encoder, decoder, config=None):
         super(AE, self).__init__()
@@ -61,8 +63,8 @@ class AE(nn.Module):
     def train(self, data, epoch, batch_size=100, lr=1e-3):
         data = self.prepare_dataloader(data, batch_size)
         params_to_optimize = [
-            {'params': self.encoder.parameters()},
-            {'params': self.decoder.parameters()}
+            {"params": self.encoder.parameters()},
+            {"params": self.decoder.parameters()},
         ]
         optim = torch.optim.Adam(params_to_optimize, lr=lr, weight_decay=1e-05)
         for _ in range(epoch):
@@ -76,9 +78,9 @@ class AE(nn.Module):
         if isinstance(save_path, str):
             save_path = Path(save_path)
         save_path.mkdir(exist_ok=rewrite, parents=True)
-        torch.save(self.state_dict(), save_path/'model_weights.bin')
+        torch.save(self.state_dict(), save_path / "model_weights.bin")
         if self.config is not None:
-            with open(save_path/"config.yml", 'w') as f:
+            with open(save_path / "config.yml", "w") as f:
                 yaml.safe_dump(self.config, f)
         else:
             warn("Your model doesn't have a config.")
@@ -86,14 +88,14 @@ class AE(nn.Module):
     @classmethod
     def load_model(cls, load_path):
         from . import get_ae
+
         if isinstance(load_path, str):
             load_path = Path(load_path)
-        with open(load_path/"config.yml") as f:
+        with open(load_path / "config.yml") as f:
             model_config = yaml.safe_load(f)
         model = get_ae(**model_config)
-        model.load_state_dict(torch.load(load_path/"model_weights.bin"))
+        model.load_state_dict(torch.load(load_path / "model_weights.bin"))
         return model
-
 
 
 class NRAE(AE):
@@ -104,20 +106,24 @@ class NRAE(AE):
         self.config = config
         self.approx_order = approx_order
         self.kernel_func = get_kernel_function(self.config["kernel"])
-    
+
     def jacobian(self, z, dz, create_graph=True):
         batch_size = dz.size(0)
         num_nn = dz.size(1)
         z_dim = dz.size(2)
 
         v = dz.view(-1, z_dim)  # (bs * num_nn , z_dim)
-        inputs = (z.unsqueeze(1).repeat(1, num_nn, 1).view(-1, z_dim))  # (bs * num_nn , z_dim)
-        jac = torch.autograd.functional.jvp(self.decoder, inputs, v=v, create_graph=create_graph)[1].view(batch_size, num_nn, -1)
+        inputs = (
+            z.unsqueeze(1).repeat(1, num_nn, 1).view(-1, z_dim)
+        )  # (bs * num_nn , z_dim)
+        jac = torch.autograd.functional.jvp(
+            self.decoder, inputs, v=v, create_graph=create_graph
+        )[1].view(batch_size, num_nn, -1)
         return jac
 
     def prepare_dataloader(self, data, batch_size):
         if not isinstance(data, EmbeddingDataset):
-            data = EmbeddingDatasetWithGraph(data, )
+            data = EmbeddingDatasetWithGraph(data,)
         data = DataLoader(data, batch_size=batch_size)
         return data
 
@@ -127,18 +133,24 @@ class NRAE(AE):
         z_dim = dz.size(2)
 
         v = dz.view(-1, z_dim)  # (bs * num_nn , z_dim)
-        inputs = (z.unsqueeze(1).repeat(1, num_nn, 1).view(-1, z_dim))  # (bs * num_nn , z_dim)
+        inputs = (
+            z.unsqueeze(1).repeat(1, num_nn, 1).view(-1, z_dim)
+        )  # (bs * num_nn , z_dim)
 
         def jac_temp(inputs):
-            jac = torch.autograd.functional.jvp(self.decoder, inputs, v=v, create_graph=create_graph)[1].view(batch_size, num_nn, -1)
+            jac = torch.autograd.functional.jvp(
+                self.decoder, inputs, v=v, create_graph=create_graph
+            )[1].view(batch_size, num_nn, -1)
             return jac
 
-        temp = torch.autograd.functional.jvp(jac_temp, inputs, v=v, create_graph=create_graph)
+        temp = torch.autograd.functional.jvp(
+            jac_temp, inputs, v=v, create_graph=create_graph
+        )
 
         jac = temp[0].view(batch_size, num_nn, -1)
         hessian = temp[1].view(batch_size, num_nn, -1)
         return jac, hessian
-        
+
     def neighborhood_recon(self, z_c, z_nn):
         recon = self.decoder(z_c)
         recon_x = recon.view(z_c.size(0), -1).unsqueeze(1)  # (bs, 1, x_dim)
@@ -148,7 +160,7 @@ class NRAE(AE):
             n_recon = recon_x + Jdz
         elif self.approx_order == 2:
             Jdz, dzHdz = self.jacobian_and_hessian(z_c, dz)
-            n_recon = recon_x + Jdz + 0.5*dzHdz
+            n_recon = recon_x + Jdz + 0.5 * dzHdz
         return n_recon
 
     def train_step(self, batch, optimizer, **kwargs):
@@ -161,18 +173,20 @@ class NRAE(AE):
         z_dim = z_c.size(1)
         z_nn = self.encoder(x_nn.view([-1] + list(x_nn.size()[2:]))).view(bs, -1, z_dim)
         n_recon = self.neighborhood_recon(z_c, z_nn)
-        n_loss = torch.norm(x_nn.view(bs, num_nn, -1) - n_recon, dim=2)**2
+        n_loss = torch.norm(x_nn.view(bs, num_nn, -1) - n_recon, dim=2) ** 2
         weights = self.kernel_func(x_c, x_nn)
-        loss = (weights*n_loss).mean()
+        loss = (weights * n_loss).mean()
         loss.backward()
         optimizer.step()
 
         return {"loss": loss.item()}
-        
+
 
 class DCEC(AE):
-    def __init__(self, encoder, decoder, z_dim, n_clusters, update_interval = 4, tol=1e-3,  **kwargs):
-        super().__init__(encoder, decoder,  **kwargs)
+    def __init__(
+        self, encoder, decoder, z_dim, n_clusters, update_interval=4, tol=1e-3, **kwargs
+    ):
+        super().__init__(encoder, decoder, **kwargs)
         self.encoder = encoder
         self.decoder = decoder
         self.update_interval = update_interval
@@ -182,37 +196,44 @@ class DCEC(AE):
         self.loss_kld = torch.nn.KLDivLoss()
         self.loss_mse = torch.nn.MSELoss()
         self.p = None
-    
+
     def init_clustering_layer(self, data):
         kmeans = KMeans(n_clusters=self.n_clusters, n_init=20)
         y_pred = kmeans.fit_predict(self.apply_encoder(data))
-        self.clustering_layer.init_weights(torch.from_numpy(kmeans.cluster_centers_)) # should be (self.n_clusters, input_dim)
+        self.clustering_layer.init_weights(
+            torch.from_numpy(kmeans.cluster_centers_)
+        )  # should be (self.n_clusters, input_dim)
         return y_pred
-    
+
     def target_distribution(self, q):
         weight = q ** 2 / torch.sum(q, dim=0)
-        return torch.transpose(torch.transpose(weight, 0, 1) / torch.sum(weight, dim=1), 0,1)
-    
+        return torch.transpose(
+            torch.transpose(weight, 0, 1) / torch.sum(weight, dim=1), 0, 1
+        )
+
     def upldate_aux_distribution(self, dataloader, ite):
         with torch.no_grad():
             q_stack = []
-            for x,y in dataloader:
+            for x, y in dataloader:
                 _, q = self.forward(x)
                 q_stack.append(q)
             q = torch.vstack(q_stack)
             self.p = self.target_distribution(q)
         y_pred = q.argmax(1)
-        return y_pred 
+        return y_pred
 
     def train_step(self, batch, optimizer, batch_size, iter_num):
-        x,y = batch
+        x, y = batch
         optimizer.zero_grad()
         out, out_clust = self.forward(x)
-        l1 = self.loss_kld(out_clust, self.p[batch_size * iter_num:batch_size * iter_num + batch_size])
-        #l1.backward()
+        l1 = self.loss_kld(
+            out_clust,
+            self.p[batch_size * iter_num : batch_size * iter_num + batch_size],
+        )
+        # l1.backward()
         l2 = self.loss_mse(out, x)
-        #l2.backward()
-        l = 0.1*l1 + l2
+        # l2.backward()
+        l = 0.1 * l1 + l2
         loss = l.data.detach().numpy()
         l.backward()
         optimizer.step()
@@ -222,9 +243,9 @@ class DCEC(AE):
         data = self.prepare_dataloader(data, batch_size)
         y_pred_last = self.init_clustering_layer(data)
         params_to_optimize = [
-            {'params': self.encoder.parameters()},
-            {'params': self.decoder.parameters()},
-            {"params": self.clustering_layer.parameters()}
+            {"params": self.encoder.parameters()},
+            {"params": self.decoder.parameters()},
+            {"params": self.clustering_layer.parameters()},
         ]
         optim = torch.optim.Adam(params_to_optimize, lr=lr, weight_decay=1e-05)
         for _ in range(epoch):
@@ -232,18 +253,21 @@ class DCEC(AE):
                 for i, batch in enumerate(tepoch):
                     if i % self.update_interval == 0:
                         y_pred = self.upldate_aux_distribution(data, i)
-                        delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0]
+                        delta_label = (
+                            np.sum(y_pred != y_pred_last).astype(np.float32)
+                            / y_pred.shape[0]
+                        )
                         y_pred_last = np.copy(y_pred)
                         # check stop criterion
                         if i > 0 and delta_label < self.tol:
-                            print('delta_label ', delta_label, '< tol ', self.tol)
-                            print('Reached tolerance threshold. Stopping training.')
+                            print("delta_label ", delta_label, "< tol ", self.tol)
+                            print("Reached tolerance threshold. Stopping training.")
                             break
                     tepoch.set_description(f"Epoch {_}")
 
                     metrics = self.train_step(batch, optim, data.batch_size, i)
                     tepoch.set_postfix(loss=metrics["loss"])
-        return 
+        return
 
     def forward(self, x):
         x = self.encoder(x)
