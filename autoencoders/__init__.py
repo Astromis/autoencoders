@@ -1,6 +1,6 @@
 import numpy as np
 
-from .ae import AE, NRAE, DCEC
+from .ae import Autoencoder, NRAE, DCEC, DistanceAE
 from .modules import FC_vec
 
 """ FC_image """
@@ -44,7 +44,7 @@ def get_ae(**model_cfg_):
     if model_cfg["arch"] == "ae":
         encoder = get_net(in_dim=x_dim, out_dim=z_dim, **model_cfg["encoder"])
         decoder = get_net(in_dim=z_dim, out_dim=x_dim, **model_cfg["decoder"])
-        ae = AE(encoder, decoder, config=model_cfg_)
+        ae = Autoencoder(encoder, decoder, config=model_cfg_)
     elif model_cfg["arch"] == "nrael":
         encoder = get_net(in_dim=x_dim, out_dim=z_dim, **model_cfg["encoder"])
         decoder = get_net(in_dim=z_dim, out_dim=x_dim, **model_cfg["decoder"])
@@ -52,8 +52,8 @@ def get_ae(**model_cfg_):
             encoder,
             decoder,
             approx_order=1,
-            kernel=model_cfg["kernel"],
-            config=model_cfg_,
+            kernel_config=model_cfg["kernel"],
+            graph_config=model_cfg_["graph_config"],
         )
     elif model_cfg["arch"] == "nraeq":
         encoder = get_net(in_dim=x_dim, out_dim=z_dim, **model_cfg["encoder"])
@@ -73,6 +73,14 @@ def get_ae(**model_cfg_):
             decoder=decoder,
             z_dim=z_dim,
             n_clusters=model_cfg["n_clusters"],
+            config=model_cfg_,
+        )
+    elif model_cfg["arch"] == "distance":
+        encoder = get_net(in_dim=x_dim, out_dim=z_dim, **model_cfg["encoder"])
+        decoder = get_net(in_dim=z_dim, out_dim=x_dim, **model_cfg["decoder"])
+        ae = DistanceAE(
+            encoder=encoder,
+            decoder=decoder,
             config=model_cfg_,
         )
     else:

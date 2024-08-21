@@ -11,7 +11,7 @@ class ClusteringLayer(nn.Module):
         self.alpha = alpha
 
         self.size_in = size_in
-        weights = torch.Tensor(self.n_clusters, size_in)
+        weights = torch.Tensor(self.n_clusters, size_in).to("cuda")
         self.weights = nn.Parameter(
             weights
         )  # nn.Parameter is a Tensor that's a module parameter.
