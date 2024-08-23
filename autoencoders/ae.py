@@ -169,6 +169,8 @@ class NRAE(Autoencoder):
 
     def train_step(self, batch, optimizer, **kwargs):
         x_c, x_nn = batch
+        x_c = x_c.to("cuda")
+        x_nn = x_nn.to("cuda")
         optimizer.zero_grad()
         bs = x_nn.size(0)
         num_nn = x_nn.size(1)
