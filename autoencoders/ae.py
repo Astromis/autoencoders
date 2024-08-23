@@ -280,7 +280,7 @@ class DCEC(Autoencoder):
                     tepoch.set_postfix(loss=metrics["loss"])
         return
     
-    def apply_encoder(self, data, batch_size=1000):
+    def apply_encoder(self, data, batch_size=1000, include_clusters=False):
         data = self.prepare_dataloader(data, batch_size)
         vectors = []
         clusters = []
@@ -297,8 +297,12 @@ class DCEC(Autoencoder):
                     clusters.append(self.clustering_layer(encoded).detach().cpu().numpy())
         self.encoder = self.encoder.train()
         self.clustering_layer  = self.clustering_layer.train()
-        return np.vstack(vectors), np.vstack(clusters) 
+        if include_clusters:
+            return np.vstack(vectors), np.vstack(clusters) 
 
+        else:
+            return np.vstack(vectors)
+    
     def forward(self, x, include_clusters=False):
         x = self.encoder(x)
         x_clust = self.clustering_layer(x)
