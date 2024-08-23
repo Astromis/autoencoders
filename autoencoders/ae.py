@@ -203,14 +203,12 @@ class DCEC(Autoencoder):
         self.p = None
 
     def init_clustering_layer(self, data):
-        #kmeans = KMeans(n_clusters=self.n_clusters, n_init=20)
-        encoded, _ = self.apply_encoder(data)
+        encoded = self.apply_encoder(data)
         kmeans = faiss.Kmeans(encoded.shape[1], self.n_clusters, niter=25)
         kmeans.train(encoded)
-        #y_pred = kmeans.fit_predict(encoded)
         y_pred = kmeans.index.search(encoded, 1)[1].squeeze()
         self.clustering_layer.init_weights(
-            torch.from_numpy(kmeans.centroids).to("cuda") # kmeans.cluster_centers_
+            torch.from_numpy(kmeans.centroids).to("cuda")
         )  # should be (self.n_clusters, input_dim)
         return y_pred
 
